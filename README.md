@@ -4,23 +4,10 @@
 
 ## 设计思路
 
-- 模型负责理解：把简历、JD 抽取成结构化数据，并逐项判断技能是否满足（附依据）
-- 代码负责计算：总分、学历和学校检查都由纯代码完成，结果确定、可测试
-- 岗位库用向量检索粗筛，再对少量候选岗位做详细分析
-
-## 目录结构
-
-| 路径 | 职责 |
-|---|---|
-| `resume_matcher/config.py` | 读取环境变量，集中管理配置 |
-| `resume_matcher/schemas.py` | 数据结构（Pydantic） |
-| `resume_matcher/llm.py` | 创建模型与 embedding |
-| `resume_matcher/extractors.py` | 抽取链与对比链 |
-| `resume_matcher/scoring.py` | 评分、学历/学校检查（不调用模型） |
-| `resume_matcher/library.py` | 岗位库索引与检索 |
-| `resume_matcher/cli.py` | 命令行入口 |
-| `data/` | 岗位库、样例简历、院校名单 |
-| `tests/` | 测试 |
+- **模型负责理解，代码负责计算**：模型把简历、岗位描述抽取成结构化数据，并逐项判断技能是否满足、给出依据；总分、学历和学校检查都由纯代码完成，结果确定、可测试。
+- **岗位技能清单以 JD 为准**：模型漏判、多判、改写技能名，都由代码对齐纠正，评分的分母不受模型波动影响。
+- **依据核对**：模型说“满足”时，依据必须能在简历原文里找到相应片段，否则降级为不满足并标记“依据存疑”。
+- **岗位库先粗筛后精排**：向量检索挑出候选岗位，再逐个详细评分，最终按总分排序。
 
 ## 快速开始
 
@@ -28,13 +15,112 @@
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env   # 然后在 .env 中填入 SILICONFLOW_API_KEY
+copy .env.example .env
 ```
+
+然后用编辑器打开 `.env`，在 `SILICONFLOW_API_KEY=` 后面填入你的 key。`.env` 已被 `.gitignore` 忽略，不会被提交。
+
+## 使用
+
+### 一份简历对一个岗位
+
+```bash
+python -m resume_matcher.cli match --resume data\samples\resume.txt --job data\jobs\llm_app_engineer.txt
+```
+
+简历支持 `.txt` 和 `.pdf`，岗位描述为 `.txt`。输出包含：总分与各维度满足率、学历与院校检查、每项技能的判断和依据、简历修改建议、可能被问到的问题。
+
+### 一份简历对岗位库，推荐最合适的岗位
+
+```bash
+python -m resume_matcher.cli recommend --resume data\samples\resume.txt --k 5 --brief
+```
+
+| 参数 | 说明 | 默认 |
+|---|---|---|
+| `--resume` | 简历文件 | 必填 |
+| `--jobs-dir` | 岗位库目录，里面放若干 `.txt` 岗位文件 | `data\jobs` |
+| `--k` | 检索前几个候选岗位并详细评分 | 3 |
+| `--brief` | 只显示排名，不显示每个岗位的完整报告 | 关 |
+
+每次运行会先同步岗位库：只给新增的岗位计算 embedding，改过的岗位替换旧版本，被删除的文件从库里移除。
+
+**关于 `--k`**：检索只说明“话题相近”，不说明“够不够格”，它挑不进来的岗位不会被评分。岗位库较大时，`--k` 要取得比想看的名次多得多（例如想看前 3 名，取 10 到 20）。
+
+## 评分规则
+
+```
+总分 = Σ(权重 × 满足率) ÷ Σ(参与计算的权重) × 100
+```
+
+| 维度 | 权重 | 满足率 | 不参与的情况 |
+|---|---|---|---|
+| 必备技能 | 70 | 判为满足的项数 ÷ 必备技能总项数 | 岗位没有必备技能 |
+| 年限 | 15 | min(简历年限 ÷ 要求年限, 1) | 岗位要求年限为 0 |
+| 加分项 | 15 | 判为满足的项数 ÷ 加分技能总项数 | 岗位没有加分技能 |
+
+不参与的维度不进计算，剩余权重按比例放大。权重在 `resume_matcher/config.py` 里调整。
+
+**学历与院校单独检查，不计入总分**：学历按 专科 < 本科 < 硕士 < 博士 比较；院校层次查 `data/schools.json` 的名单，名单里查不到时显示“无法判断”，不当作不达标。要求里同时写了多个层次（如 985/211）时，取最低的作为门槛。`data/schools.json` 目前只有示例，请自行补全并以教育部公布的名单为准。
+
+## 目录结构
+
+| 路径 | 职责 |
+|---|---|
+| `resume_matcher/config.py` | 读取环境变量，集中管理配置、路径和评分权重 |
+| `resume_matcher/schemas.py` | 数据结构（Pydantic） |
+| `resume_matcher/llm.py` | 创建模型与 embedding |
+| `resume_matcher/extractors.py` | 简历、岗位描述的抽取链，以及带缓存的岗位抽取 |
+| `resume_matcher/cache.py` | 岗位抽取结果缓存 |
+| `resume_matcher/judge.py` | 逐项技能判断，并与 JD 技能清单对齐 |
+| `resume_matcher/grounding.py` | 依据核对 |
+| `resume_matcher/scoring.py` | 评分、学历/学校检查（不调用模型） |
+| `resume_matcher/pipeline.py` | 完整流程：抽取 → 判断 → 评分 |
+| `resume_matcher/library.py` | 岗位库的向量索引与检索 |
+| `resume_matcher/recommend.py` | 岗位库推荐 |
+| `resume_matcher/report.py` | 把结果排版成文本 |
+| `resume_matcher/cli.py` | 命令行入口 |
+| `data/` | 岗位库、样例简历、院校名单 |
+| `tests/` | 测试 |
+
+运行时会生成两个本地目录，都已被忽略，可以随时删除，下次运行自动重建：
+
+- `.cache/jobs/`：岗位抽取结果缓存。同一份岗位描述只抽取一次；岗位描述内容或抽取提示词变了，缓存自动作废。
+- `.job_db/`：岗位库的向量索引。
+
+## 配置
+
+`.env` 里只有 `SILICONFLOW_API_KEY` 是必须的，其余为可选项，不填则使用 `config.py` 里的默认值：
+
+| 变量 | 默认 |
+|---|---|
+| `LLM_BASE_URL` | `https://api.siliconflow.cn/v1` |
+| `CHAT_MODEL` | `deepseek-ai/DeepSeek-V4-Flash` |
+| `EMBEDDING_MODEL` | `BAAI/bge-m3` |
+
+## 测试
+
+```bash
+python -m pytest tests -q
+```
+
+全部测试都是离线的：用假模型和假 embedding，不联网、不花钱，也不需要 key。
+
+## 已知局限
+
+- **模型判断的准确度只在很小的样本上验过**：1 份简历、4 个岗位，没有系统的标注测试集。对“SQL 算不算 MySQL”“用过 Streamlit 算不算会可视化”这类边界情况，模型倾向于保守，一律判为不满足。
+- **依据核对只能拦住对不上原文的依据**：模型引用了真实的原文、但推理不成立时，拦不住。
+- **所有技能权重相等**：必备技能里“Python”和“了解 Git”占同样的分，没有区分重要程度，也没有区分“精通”和“了解”。
+- **岗位描述里的软素质不参与评分**（如沟通能力），抽取时被排除。
+- **“A 或 B”的二选一要求会被拆成两项都必备**，对这类岗位要求偏严。
+- **简历抽取、逐项判断每次调用模型，结果可能有波动**；只有岗位抽取有缓存。同一份简历的检索距离在不同运行之间也会略有变化。
+- **院校名单需要自己维护**，目前只有示例。
 
 ## 开发进度
 
 - [x] 第 1 步：项目骨架
 - [x] 第 2 步：数据结构与评分（纯代码，先写测试）
-- [ ] 第 3 步：模型接入与抽取链
-- [ ] 第 4 步：命令行 `match`
-- [ ] 第 5 步：岗位库与 `recommend`
+- [x] 第 3 步：模型接入、抽取链、逐项判断、依据核对、岗位抽取缓存
+- [x] 第 4 步：命令行 `match`
+- [x] 第 5 步：岗位库与 `recommend`
+- [ ] 后续：标注测试集并量化准确度、补全院校名单、技能权重、Excel 导出
