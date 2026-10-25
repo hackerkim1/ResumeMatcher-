@@ -10,11 +10,12 @@ from pathlib import Path
 
 from resume_matcher.config import JOBS_DIR
 from resume_matcher.documents import DocumentError, read_document
+from resume_matcher.jobsfile import read_rows, tracks_in
 from resume_matcher.llm import MissingApiKeyError
 from resume_matcher.pipeline import analyze
 from resume_matcher.recommend import recommend
 from resume_matcher.report import format_ranking, format_report
-from resume_matcher.services import build_library, build_services
+from resume_matcher.services import build_crawled_library, build_library, build_services
 
 
 class UserError(Exception):
@@ -32,6 +33,8 @@ def build_parser() -> argparse.ArgumentParser:
     rec = sub.add_parser("recommend", help="一份简历对岗位库，推荐最合适的岗位")
     rec.add_argument("--resume", required=True, help="简历文件（.txt 或 .pdf）")
     rec.add_argument("--jobs-dir", default=str(JOBS_DIR), help="岗位库目录，里面是若干 .txt 岗位文件")
+    rec.add_argument("--jobs-file", help="改用抓取的岗位库（jobs.jsonl），不再读 --jobs-dir")
+    rec.add_argument("--track", help="只在这个专业方向里检索，需要和 --jobs-file 一起用")
     rec.add_argument("--k", type=int, default=3, help="检索前几个候选岗位并详细评分")
     rec.add_argument("--brief", action="store_true", help="只显示排名，不显示每个岗位的完整报告")
     return parser
@@ -49,16 +52,27 @@ def _run_match(args) -> str:
 
 def _run_recommend(args) -> str:
     resume_text = read_document(args.resume)
-    jobs_dir = Path(args.jobs_dir)
-    if not any(jobs_dir.glob("*.txt")):
-        raise UserError(f"没有找到岗位文件：{jobs_dir} 下没有 .txt 文件")
+
+    # 所有能在联网之前发现的问题，都在创建模型之前报出来
+    if args.jobs_file:
+        rows = read_rows(args.jobs_file)
+        if not rows:
+            raise UserError(f"没有找到抓取的岗位数据：{args.jobs_file}（请先运行 python -m resume_matcher.crawler）")
+        if args.track and args.track not in tracks_in(rows):
+            raise UserError(f"没有“{args.track}”这个方向，已抓取的方向：{'、'.join(tracks_in(rows))}")
+    else:
+        if args.track:
+            raise UserError("--track 只能和 --jobs-file 一起使用")
+        jobs_dir = Path(args.jobs_dir)
+        if not any(jobs_dir.glob("*.txt")):
+            raise UserError(f"没有找到岗位文件：{jobs_dir} 下没有 .txt 文件")
 
     s = build_services()
-    library, stats = build_library(jobs_dir)
+    library, stats = build_crawled_library(args.jobs_file) if args.jobs_file else build_library(jobs_dir)
     header = f"岗位库已同步：新增 {stats['added']}，移除 {stats['removed']}，沿用 {stats['kept']}\n"
 
     recs = recommend(resume_text, library, args.k, s.resume_chain, s.job_chain, s.match_chain,
-                     s.cache, s.schools)
+                     s.cache, s.schools, track=args.track)
     parts = [header + format_ranking(recs)]
     if not args.brief:
         parts += [format_report(r.result) for r in recs]

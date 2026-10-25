@@ -21,9 +21,10 @@ def resume_query(resume: ResumeInfo) -> str:
 
 
 def recommend(resume_text: str, library, k: int, resume_chain, job_chain, match_chain,
-              cache, schools: dict) -> list[Recommendation]:
+              cache, schools: dict, track=None) -> list[Recommendation]:
+    """track 不为空时，只在这个专业方向的岗位里检索"""
     resume = resume_chain.invoke({"text": resume_text})  # 简历只抽取一次
-    hits = library.search(resume_query(resume), k)
+    hits = library.search(resume_query(resume), k, track=track)
     recs = [
         Recommendation(
             source=hit.source,

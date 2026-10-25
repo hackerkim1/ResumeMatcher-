@@ -49,6 +49,7 @@ class ExplodingChain:
 def start(services):
     at = AppTest.from_file(APP, default_timeout=30)
     at.session_state["_services"] = services
+    at.session_state["_crawled_rows"] = []  # 不依赖本机有没有抓取过岗位
     at.run()
     assert not at.exception
     return at
@@ -109,11 +110,40 @@ def start_recommend(tmp_path, judge_replies=None, n_jobs=2):
     judge_replies = judge_replies or [judge_json(True), judge_json(False)]
     at = AppTest.from_file(APP, default_timeout=30)
     at.session_state["_services"] = recommend_services(tmp_path, judge_replies)
+    at.session_state["_crawled_rows"] = []
     library_and_stats = make_library(tmp_path, n_jobs)
-    at.session_state["_library_factory"] = lambda: library_and_stats
+    at.session_state["_library_factory"] = lambda source: library_and_stats
     at.run()
     assert not at.exception
     return at
+
+
+CRAWLED_ROWS = [
+    {"job_id": "1", "text": "岗位1：数据分析，需要 SQL", "track": "数据", "title": "数据分析"},
+    {"job_id": "2", "text": "岗位2：后端开发，需要 Java", "track": "计算机/软件", "title": "后端开发"},
+    {"job_id": "3", "text": "岗位3：数据开发，需要 Spark", "track": "数据", "title": "数据开发"},
+]
+
+
+def start_crawled(tmp_path):
+    from langchain_core.embeddings import DeterministicFakeEmbedding
+    from resume_matcher.library import JobLibrary
+
+    library = JobLibrary(DeterministicFakeEmbedding(size=16), tmp_path / "crawled_db", collection_name="jobs_crawled")
+    stats = library.sync_rows(CRAWLED_ROWS)
+    at = AppTest.from_file(APP, default_timeout=30)
+    at.session_state["_services"] = recommend_services(tmp_path, [judge_json(True), judge_json(False), judge_json(True)])
+    at.session_state["_crawled_rows"] = CRAWLED_ROWS
+    asked = []
+
+    def factory(source):
+        asked.append(source)
+        return library, stats
+
+    at.session_state["_library_factory"] = factory
+    at.run()
+    assert not at.exception
+    return at, asked
 
 
 def click_recommend(at, resume=RESUME_TEXT):
@@ -121,6 +151,54 @@ def click_recommend(at, resume=RESUME_TEXT):
     at.button(key="run_recommend").click()
     at.run()
     return at
+
+
+def test_without_crawled_jobs_there_is_no_source_choice(tmp_path):
+    at = start_recommend(tmp_path)
+    assert len(at.radio) == 0
+    assert len(at.selectbox) == 0
+
+
+def test_with_crawled_jobs_the_page_offers_both_sources_and_the_tracks(tmp_path):
+    at, _ = start_crawled(tmp_path)
+    assert at.radio(key="rec_source").options == ["样例岗位", "抓取的岗位（国聘）"]
+    assert at.radio(key="rec_source").value == "样例岗位"
+    assert len(at.selectbox) == 0  # 方向只在选了抓取的岗位时才出现
+
+
+def test_choosing_the_crawled_source_shows_the_track_filter(tmp_path):
+    at, _ = start_crawled(tmp_path)
+    at.radio(key="rec_source").set_value("抓取的岗位（国聘）")
+    at.run()
+    assert at.selectbox(key="rec_track").options == ["全部", "数据", "计算机/软件"]
+
+
+def test_recommending_from_the_crawled_source_uses_that_library(tmp_path):
+    at, asked = start_crawled(tmp_path)
+    at.radio(key="rec_source").set_value("抓取的岗位（国聘）")
+    at.run()
+    at.slider(key="rec_k").set_value(5)
+    click_recommend(at)
+    assert not at.exception and not at.error
+    assert asked == ["crawled"]
+    assert {r.source for r in at.session_state["recommend_results"]} == {"iguopin:1", "iguopin:2", "iguopin:3"}
+
+
+def test_the_track_filter_limits_the_recommendations(tmp_path):
+    at, _ = start_crawled(tmp_path)
+    at.radio(key="rec_source").set_value("抓取的岗位（国聘）")
+    at.run()
+    at.selectbox(key="rec_track").set_value("数据")
+    at.slider(key="rec_k").set_value(5)
+    click_recommend(at)
+    assert not at.error
+    assert {r.source for r in at.session_state["recommend_results"]} == {"iguopin:1", "iguopin:3"}
+
+
+def test_the_sample_source_still_uses_the_sample_library(tmp_path):
+    at, asked = start_crawled(tmp_path)
+    click_recommend(at)
+    assert asked == ["samples"]
 
 
 def test_page_has_two_tabs(tmp_path):

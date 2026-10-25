@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from resume_matcher.cache import JobCache
 from resume_matcher.config import JOB_CACHE_DIR, VECTOR_DB_DIR
 from resume_matcher.extractors import build_job_chain, build_resume_chain
+from resume_matcher.jobsfile import read_rows
 from resume_matcher.judge import build_match_chain
 from resume_matcher.library import JobLibrary
 from resume_matcher.llm import get_embedding, get_llm
@@ -31,6 +32,12 @@ def build_services() -> Services:
 
 
 def build_library(jobs_dir):
-    """创建岗位库并与岗位目录同步，返回 (岗位库, 同步统计)"""
+    """创建样例岗位库并与岗位目录同步，返回 (岗位库, 同步统计)"""
     library = JobLibrary(get_embedding(), VECTOR_DB_DIR)
     return library, library.sync(jobs_dir)
+
+
+def build_crawled_library(jobs_file):
+    """创建抓取岗位的库并与 jobs.jsonl 同步。用独立的集合，和样例岗位互不影响"""
+    library = JobLibrary(get_embedding(), VECTOR_DB_DIR, collection_name="jobs_crawled")
+    return library, library.sync_rows(read_rows(jobs_file))
