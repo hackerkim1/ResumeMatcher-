@@ -4,6 +4,7 @@ langchain-chroma
 pydantic
 python-dotenv
 pymupdf
+streamlit
 pandas
 openpyxl
 pytest
