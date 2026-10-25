@@ -21,6 +21,29 @@ def test_parser_requires_resume_and_job():
         build_parser().parse_args(["match", "--resume", "r.txt"])
 
 
+def test_parser_accepts_recommend_command_with_defaults():
+    args = build_parser().parse_args(["recommend", "--resume", "r.txt"])
+    assert args.command == "recommend"
+    assert args.k == 3
+    assert args.brief is False
+
+
+def test_parser_accepts_recommend_options():
+    args = build_parser().parse_args(["recommend", "--resume", "r.txt", "--k", "5", "--brief"])
+    assert args.k == 5
+    assert args.brief is True
+
+
+def test_recommend_reports_an_empty_jobs_folder_without_touching_the_model(tmp_path, capsys):
+    resume = tmp_path / "r.txt"
+    resume.write_text("简历", encoding="utf-8")
+    empty = tmp_path / "jobs"
+    empty.mkdir()
+    code = main(["recommend", "--resume", str(resume), "--jobs-dir", str(empty)])
+    assert code == 1
+    assert "没有找到岗位文件" in capsys.readouterr().err
+
+
 def test_read_document_reads_txt(tmp_path):
     f = tmp_path / "r.txt"
     f.write_text("你好，简历", encoding="utf-8")

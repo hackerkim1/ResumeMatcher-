@@ -9,6 +9,16 @@ def _check_lines(checks: list[SkillCheck]) -> list[str]:
     return [f"  {'✓' if c.matched else '✗'} {c.skill}  依据：{c.evidence}" for c in checks]
 
 
+def format_ranking(recs) -> str:
+    """推荐排名的摘要：按总分从高到低，每行一个岗位"""
+    if not recs:
+        return "没有检索到任何岗位。"
+    lines = ["推荐排名（先按语义检索候选岗位，再逐个详细评分）："]
+    for i, r in enumerate(recs, 1):
+        lines.append(f"  {i}. {r.result.job.title}  {r.result.score} 分  （{r.source}，检索距离 {r.distance:.3f}）")
+    return "\n".join(lines)
+
+
 def format_report(result: AnalysisResult) -> str:
     lines = [
         f"===== {result.job.title} =====",
