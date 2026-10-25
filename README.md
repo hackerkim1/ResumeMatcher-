@@ -47,6 +47,24 @@ python -m resume_matcher.cli recommend --resume data\samples\resume.txt --k 5 --
 
 **关于 `--k`**：检索只说明“话题相近”，不说明“够不够格”，它挑不进来的岗位不会被评分。岗位库较大时，`--k` 要取得比想看的名次多得多（例如想看前 3 名，取 10 到 20）。
 
+### 网页版
+
+```bash
+.venv\Scripts\streamlit run app.py
+```
+
+浏览器会打开页面，有两个标签页，功能和上面两条命令一一对应：
+
+- **单岗位匹配**：上传简历（txt/pdf）和岗位描述（txt），或直接粘贴文字，点“开始分析”。结果包括匹配度和各维度进度条、学历院校检查、每项技能的判断和依据、修改建议、面试题。
+- **岗位库推荐**：上传或粘贴简历，用滑块选 k，点“开始推荐”。结果是一张排名表，每个岗位可展开查看完整报告。
+
+注意：
+
+- 必须用 `streamlit run` 启动。直接 `python app.py`（包括在 PyCharm 里点运行按钮）只会打印一串 `missing ScriptRunContext` 就退出。想在 PyCharm 里一键运行，可以新建运行配置：类型选 Python，改为“模块名” `streamlit`，参数填 `run app.py`。
+- 第一次打开要几秒加载；点击后分析一个岗位约十几秒，推荐是逐个岗位评分，岗位越多越慢。
+- 简历只在内存中处理，不写入磁盘。页面上不输入 API key，只从 `.env` 读取。
+- txt 文件支持 UTF-8 和 GBK（Windows 记事本默认保存的编码）。PDF 里没有文字层（扫描件）时会提示。
+
 ## 评分规则
 
 ```
@@ -93,7 +111,11 @@ python -m resume_matcher.schools_builder --write   # 确认无误后写入
 | `resume_matcher/recommend.py` | 岗位库推荐 |
 | `resume_matcher/report.py` | 把结果排版成文本 |
 | `resume_matcher/schools_builder.py` | 从教育部页面生成院校名单 |
+| `resume_matcher/documents.py` | 读取简历和岗位描述（txt/pdf，按路径或按上传的字节） |
+| `resume_matcher/services.py` | 组装模型、链、缓存、院校名单和岗位库，命令行和网页共用 |
 | `resume_matcher/cli.py` | 命令行入口 |
+| `resume_matcher/view.py` | 网页上的结果展示 |
+| `app.py` | 网页入口（Streamlit） |
 | `data/` | 岗位库、样例简历、院校名单 |
 | `tests/` | 测试 |
 
@@ -118,7 +140,7 @@ python -m resume_matcher.schools_builder --write   # 确认无误后写入
 python -m pytest tests -q
 ```
 
-全部测试都是离线的：用假模型和假 embedding，不联网、不花钱，也不需要 key。
+全部测试都是离线的：用假模型和假 embedding，不联网、不花钱，也不需要 key。网页用 Streamlit 自带的 `AppTest` 在无头模式下测试交互逻辑；布局和显示效果需要在浏览器里实际打开查看。
 
 ## 已知局限
 
@@ -128,6 +150,7 @@ python -m pytest tests -q
 - **岗位描述里的软素质不参与评分**（如沟通能力），抽取时被排除。
 - **“A 或 B”的二选一要求会被拆成两项都必备**，对这类岗位要求偏严。
 - **简历抽取、逐项判断每次调用模型，结果可能有波动**；只有岗位抽取有缓存。同一份简历的检索距离在不同运行之间也会略有变化。
+- **模型给的依据有时比较笼统**：例如把整行技能清单摘抄下来作为依据，而不是最能说明问题的那一句。依据核对只检查它是否出自原文，不检查它是否贴切。
 - **院校只有 985/211 两个层次，且校名是精确匹配**：不是 985/211 的学校、写了校区后缀或简称的学校，都显示“无法判断”，分不清“确实不是”和“名单里没有这个名字”。
 
 ## 开发进度
@@ -137,4 +160,5 @@ python -m pytest tests -q
 - [x] 第 3 步：模型接入、抽取链、逐项判断、依据核对、岗位抽取缓存
 - [x] 第 4 步：命令行 `match`
 - [x] 第 5 步：岗位库与 `recommend`
+- [x] 网页版（Streamlit）：共用层、单岗位匹配、结果展示、岗位库推荐，并在浏览器里检查过桌面和手机宽度
 - [ ] 后续：标注测试集并量化准确度、补全院校名单、技能权重、Excel 导出
