@@ -11,5 +11,8 @@ __pycache__/
 .job_db/
 .cache/
 
+# 抓取下来的岗位数据：仅个人学习使用，不提交、不公开
+data/crawled/
+
 # IDE
 .idea/
