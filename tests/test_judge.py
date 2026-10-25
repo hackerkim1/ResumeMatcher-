@@ -90,6 +90,19 @@ def test_judge_returns_aligned_report_even_if_model_skips_a_skill():
     assert [c.skill for c in report.preferred_checks] == ["FastAPI"]
 
 
+def test_judge_downgrades_match_whose_evidence_is_not_in_the_resume():
+    resume = "技能：Python、LangChain"
+    raw = report_json(
+        [check("Python", evidence="技能：Python"), check("LangChain", evidence="用 Docker 部署了服务")],
+        [check("FastAPI", matched=False, evidence="无")],
+    )
+    chain = build_match_chain(FakeListChatModel(responses=[raw]))
+    report = judge(resume, make_job(), chain)
+    assert report.required_checks[0].matched is True
+    assert report.required_checks[1].matched is False
+    assert report.required_checks[1].evidence.startswith("【依据存疑】")
+
+
 def test_judge_with_no_preferred_skills_drops_invented_checks():
     raw = report_json([check("Python")], [check("模型编造的加分项")])
     chain = build_match_chain(FakeListChatModel(responses=[raw]))

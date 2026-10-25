@@ -6,6 +6,7 @@
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
+from resume_matcher.grounding import verify_checks
 from resume_matcher.llm import get_llm
 from resume_matcher.schemas import JobRequirement, MatchReport, SkillCheck
 
@@ -67,7 +68,7 @@ def _numbered(skills: list[str]) -> str:
 
 
 def judge(resume_text: str, job: JobRequirement, chain) -> MatchReport:
-    """对比简历原文和岗位要求，返回与 JD 技能清单对齐后的报告"""
+    """对比简历原文和岗位要求，返回与 JD 技能清单对齐、且依据核对过的报告"""
     report = chain.invoke({
         "resume_text": resume_text,
         "job_title": job.title,
@@ -75,6 +76,8 @@ def judge(resume_text: str, job: JobRequirement, chain) -> MatchReport:
         "preferred_list": _numbered(job.preferred_skills),
     })
     return report.model_copy(update={
-        "required_checks": align_checks(job.required_skills, report.required_checks),
-        "preferred_checks": align_checks(job.preferred_skills, report.preferred_checks),
+        "required_checks": verify_checks(
+            align_checks(job.required_skills, report.required_checks), resume_text),
+        "preferred_checks": verify_checks(
+            align_checks(job.preferred_skills, report.preferred_checks), resume_text),
     })
