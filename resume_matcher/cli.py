@@ -8,33 +8,17 @@ import argparse
 import sys
 from pathlib import Path
 
-import pymupdf
-
-from resume_matcher.cache import JobCache
-from resume_matcher.config import JOB_CACHE_DIR, JOBS_DIR, VECTOR_DB_DIR
-from resume_matcher.extractors import build_job_chain, build_resume_chain
-from resume_matcher.judge import build_match_chain
-from resume_matcher.library import JobLibrary
-from resume_matcher.llm import MissingApiKeyError, get_embedding, get_llm
+from resume_matcher.config import JOBS_DIR
+from resume_matcher.documents import DocumentError, read_document
+from resume_matcher.llm import MissingApiKeyError
 from resume_matcher.pipeline import analyze
 from resume_matcher.recommend import recommend
 from resume_matcher.report import format_ranking, format_report
-from resume_matcher.scoring import load_schools
+from resume_matcher.services import build_library, build_services
 
 
 class UserError(Exception):
     """用户操作上的问题（不是程序 bug），直接把说明显示给用户"""
-
-
-def read_document(path) -> str:
-    """读取文本：pdf 用 PyMuPDF，其他按 UTF-8 文本读"""
-    p = Path(path)
-    if not p.is_file():
-        raise FileNotFoundError(str(p))
-    if p.suffix.lower() == ".pdf":
-        with pymupdf.open(p) as doc:
-            return "\n".join(page.get_text() for page in doc)
-    return p.read_text(encoding="utf-8")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -58,15 +42,8 @@ def _run_match(args) -> str:
     resume_text = read_document(args.resume)
     jd_text = read_document(args.job)
 
-    llm = get_llm()
-    result = analyze(
-        resume_text, jd_text,
-        resume_chain=build_resume_chain(llm),
-        job_chain=build_job_chain(llm),
-        match_chain=build_match_chain(llm),
-        cache=JobCache(JOB_CACHE_DIR),
-        schools=load_schools(),
-    )
+    s = build_services()
+    result = analyze(resume_text, jd_text, s.resume_chain, s.job_chain, s.match_chain, s.cache, s.schools)
     return format_report(result)
 
 
@@ -76,19 +53,12 @@ def _run_recommend(args) -> str:
     if not any(jobs_dir.glob("*.txt")):
         raise UserError(f"没有找到岗位文件：{jobs_dir} 下没有 .txt 文件")
 
-    llm = get_llm()
-    library = JobLibrary(get_embedding(), VECTOR_DB_DIR)
-    stats = library.sync(jobs_dir)
+    s = build_services()
+    library, stats = build_library(jobs_dir)
     header = f"岗位库已同步：新增 {stats['added']}，移除 {stats['removed']}，沿用 {stats['kept']}\n"
 
-    recs = recommend(
-        resume_text, library, args.k,
-        resume_chain=build_resume_chain(llm),
-        job_chain=build_job_chain(llm),
-        match_chain=build_match_chain(llm),
-        cache=JobCache(JOB_CACHE_DIR),
-        schools=load_schools(),
-    )
+    recs = recommend(resume_text, library, args.k, s.resume_chain, s.job_chain, s.match_chain,
+                     s.cache, s.schools)
     parts = [header + format_ranking(recs)]
     if not args.brief:
         parts += [format_report(r.result) for r in recs]
@@ -109,7 +79,7 @@ def main(argv=None) -> int:
     except FileNotFoundError as e:
         print(f"找不到文件：{e.args[0]}", file=sys.stderr)
         return 1
-    except (UserError, MissingApiKeyError) as e:
+    except (UserError, DocumentError, MissingApiKeyError) as e:
         print(f"错误：{e}", file=sys.stderr)
         return 1
     except Exception as e:
