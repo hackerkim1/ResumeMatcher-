@@ -1,0 +1,11 @@
+张三
+北京邮电大学 计算机科学与技术 本科 2026届
+
+技能：Python、LangChain、Chroma、Streamlit、SQL、Git、Linux 基础
+
+实习经历：
+2025.07-2025.09 某科技公司 数据开发实习生，使用 Python 和 SQL 清洗业务数据，编写日报脚本，共 2 个月。
+
+项目经历：
+1. 课程知识库问答系统：基于 LangChain 和 Chroma 搭建 RAG 问答，支持多轮对话和流式输出，使用 Streamlit 做前端。
+2. 文本分类实验：用 scikit-learn 对新闻标题做分类，对比了 TF-IDF 与逻辑回归、朴素贝叶斯的效果。
