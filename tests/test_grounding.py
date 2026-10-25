@@ -36,6 +36,22 @@ def test_hyphenated_token_is_not_split():
     assert is_grounded("scikit-learn", RESUME)
 
 
+def test_paraphrased_evidence_is_grounded_when_every_english_term_is_in_the_resume():
+    # 真实运行里模型没有逐字摘抄，而是改写成“技能中列出Python，实习中使用Python和SQL…”，判断本身是对的
+    assert is_grounded("技能中列出Python，实习中使用Python和SQL清洗业务数据", RESUME)
+    assert is_grounded("项目中使用scikit-learn对新闻标题做分类", RESUME)
+
+
+def test_paraphrased_evidence_naming_a_term_missing_from_the_resume_is_not_grounded():
+    assert not is_grounded("技能中列出Docker，用于部署服务", RESUME)
+    # 一个术语在简历里、另一个不在：仍然存疑
+    assert not is_grounded("实习中使用Python和Redis处理数据", RESUME)
+
+
+def test_english_terms_are_compared_without_regard_to_case_or_spaces():
+    assert is_grounded("技能中列出python和sql", RESUME)
+
+
 def test_none_marker_is_not_grounded():
     assert not is_grounded("无", RESUME)
 
