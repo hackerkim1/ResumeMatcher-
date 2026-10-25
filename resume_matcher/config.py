@@ -10,7 +10,7 @@ JOBS_DIR = DATA_DIR / "jobs"
 SCHOOLS_FILE = DATA_DIR / "schools.json"
 VECTOR_DB_DIR = ROOT_DIR / ".job_db"
 JOB_CACHE_DIR = ROOT_DIR / ".cache" / "jobs"
-CRAWLED_DIR = DATA_DIR / "crawled" / "iguopin"  # 抓取下来的岗位，已被 .gitignore 排除
+CRAWLED_FILE = DATA_DIR / "crawled" / "iguopin" / "jobs.jsonl"  # 抓取下来的岗位，已被 .gitignore 排除
 
 load_dotenv(ROOT_DIR / ".env")
 
