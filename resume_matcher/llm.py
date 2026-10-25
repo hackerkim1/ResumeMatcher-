@@ -4,9 +4,13 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from resume_matcher import config
 
 
+class MissingApiKeyError(RuntimeError):
+    """没有配置 API key。单独成类，命令行只对这一种错误显示完整提示"""
+
+
 def _require_key():
     if not config.API_KEY:
-        raise RuntimeError("未读取到 SILICONFLOW_API_KEY，请检查项目根目录下的 .env 文件")
+        raise MissingApiKeyError("未读取到 SILICONFLOW_API_KEY，请检查项目根目录下的 .env 文件")
 
 
 def get_llm(model: str | None = None, temperature: float = 0) -> ChatOpenAI:
