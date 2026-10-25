@@ -1,0 +1,14 @@
+# 密钥
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# 本地生成的向量库
+.job_db/
+
+# IDE
+.idea/

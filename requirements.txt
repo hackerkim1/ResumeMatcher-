@@ -1,0 +1,9 @@
+langchain-core
+langchain-openai
+langchain-chroma
+pydantic
+python-dotenv
+pymupdf
+pandas
+openpyxl
+pytest
