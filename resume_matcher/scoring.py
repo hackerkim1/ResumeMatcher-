@@ -48,7 +48,9 @@ def education_check(resume: ResumeInfo, job: JobRequirement, schools: dict) -> d
             # 名单里查不到不等于不达标，只能说无法判断
             school = _result("无法判断", f"{resume.school}不在院校名单中，岗位要求：{req}")
         else:
-            need_rank = TIER_RANK["985"] if "985" in req else TIER_RANK["211"] if "211" in req else 0
+            # 要求里同时提到多个层次（如“985/211优先”）时，取最低的作为门槛
+            mentioned = [TIER_RANK[t] for t in ("985", "211") if t in req]
+            need_rank = min(mentioned) if mentioned else 0
             ok = TIER_RANK[tier] >= need_rank
             school = _result("满足" if ok else "不满足", f"{resume.school}属于{tier}，岗位要求：{req}")
     return {"degree": degree, "school": school}

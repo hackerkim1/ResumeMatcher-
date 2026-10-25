@@ -120,6 +120,22 @@ def test_school_985_satisfies_985_or_211_requirement():
     assert r["school"]["status"] == "满足"
 
 
+def test_school_211_satisfies_985_or_211_requirement():
+    # 要求里同时提到多个层次时，取最低的作为门槛
+    r = education_check(make_resume(school="北京邮电大学"), make_job(school_requirement="985/211优先"), SCHOOLS)
+    assert r["school"]["status"] == "满足"
+
+
+def test_school_requirement_order_does_not_matter():
+    r = education_check(make_resume(school="北京邮电大学"), make_job(school_requirement="211或985"), SCHOOLS)
+    assert r["school"]["status"] == "满足"
+
+
+def test_school_985_satisfies_211_requirement():
+    r = education_check(make_resume(school="清华大学"), make_job(school_requirement="211及以上"), SCHOOLS)
+    assert r["school"]["status"] == "满足"
+
+
 def test_school_211_does_not_satisfy_985_requirement():
     r = education_check(make_resume(school="北京邮电大学"), make_job(school_requirement="985"), SCHOOLS)
     assert r["school"]["status"] == "不满足"
