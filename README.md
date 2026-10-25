@@ -63,6 +63,19 @@ python -m resume_matcher.cli recommend --resume data\samples\resume.txt --k 5 --
 
 **学历与院校单独检查，不计入总分**：学历按 专科 < 本科 < 硕士 < 博士 比较；院校层次查 `data/schools.json` 的名单，名单里查不到时显示“无法判断”，不当作不达标。要求里同时写了多个层次（如 985/211）时，取最低的作为门槛。`data/schools.json` 目前只有示例，请自行补全并以教育部公布的名单为准。
 
+## 更新院校名单
+
+`data/schools.json` 由脚本根据教育部公布的“985 工程”“211 工程”页面生成，文件里记录了来源网址和抓取日期：
+
+```bash
+python -m resume_matcher.schools_builder           # 只预览，显示数量、校验警告和与现有文件的差异
+python -m resume_matcher.schools_builder --write   # 确认无误后写入
+```
+
+脚本会检查 985 是否为 39 所、211 是否为 112 所、985 是否都在 211 名单里；数量对不上会给出警告。页面解析不到校名时不会覆盖现有文件。
+
+名单是教育部 2005、2006 年的版本，之后改过名的学校（如国防科学技术大学、第二军医大学）需要自行留意。校名目前是精确匹配：简历里写校区后缀（如“中国地质大学（武汉）”）或简称（如“北邮”）会被判为未收录。
+
 ## 目录结构
 
 | 路径 | 职责 |
@@ -79,6 +92,7 @@ python -m resume_matcher.cli recommend --resume data\samples\resume.txt --k 5 --
 | `resume_matcher/library.py` | 岗位库的向量索引与检索 |
 | `resume_matcher/recommend.py` | 岗位库推荐 |
 | `resume_matcher/report.py` | 把结果排版成文本 |
+| `resume_matcher/schools_builder.py` | 从教育部页面生成院校名单 |
 | `resume_matcher/cli.py` | 命令行入口 |
 | `data/` | 岗位库、样例简历、院校名单 |
 | `tests/` | 测试 |
@@ -114,7 +128,7 @@ python -m pytest tests -q
 - **岗位描述里的软素质不参与评分**（如沟通能力），抽取时被排除。
 - **“A 或 B”的二选一要求会被拆成两项都必备**，对这类岗位要求偏严。
 - **简历抽取、逐项判断每次调用模型，结果可能有波动**；只有岗位抽取有缓存。同一份简历的检索距离在不同运行之间也会略有变化。
-- **院校名单需要自己维护**，目前只有示例。
+- **院校只有 985/211 两个层次，且校名是精确匹配**：不是 985/211 的学校、写了校区后缀或简称的学校，都显示“无法判断”，分不清“确实不是”和“名单里没有这个名字”。
 
 ## 开发进度
 
