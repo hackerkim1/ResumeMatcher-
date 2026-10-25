@@ -9,6 +9,7 @@ DATA_DIR = ROOT_DIR / "data"
 JOBS_DIR = DATA_DIR / "jobs"
 SCHOOLS_FILE = DATA_DIR / "schools.json"
 VECTOR_DB_DIR = ROOT_DIR / ".job_db"
+JOB_CACHE_DIR = ROOT_DIR / ".cache" / "jobs"
 
 load_dotenv(ROOT_DIR / ".env")
 

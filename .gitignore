@@ -7,8 +7,9 @@ __pycache__/
 .venv/
 .pytest_cache/
 
-# 本地生成的向量库
+# 本地生成的向量库和抽取缓存（都可以重新生成）
 .job_db/
+.cache/
 
 # IDE
 .idea/

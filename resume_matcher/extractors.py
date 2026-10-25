@@ -2,6 +2,8 @@
 
 llm 作为参数传入（而不是在模块里写死），测试时可以换成假模型。
 """
+import hashlib
+
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -53,3 +55,18 @@ def build_resume_chain(llm=None):
 def build_job_chain(llm=None):
     """岗位描述抽取链。输入 {"text": JD 文本}，输出 JobRequirement"""
     return make_structured_chain(llm or get_llm(), JobRequirement, JOB_PROMPT)
+
+
+def job_prompt_version() -> str:
+    """提示词内容的短哈希，提示词一改缓存就自动过期"""
+    return hashlib.sha256(JOB_PROMPT.encode("utf-8")).hexdigest()[:12]
+
+
+def extract_job_cached(text: str, chain, cache) -> JobRequirement:
+    """先查缓存，没有才调用模型，并把结果写回缓存"""
+    version = job_prompt_version()
+    job = cache.get(text, version)
+    if job is None:
+        job = chain.invoke({"text": text})
+        cache.put(text, version, job)
+    return job
